@@ -4,11 +4,11 @@ import type { AgentState, StepResult } from "@/lib/types";
 
 const SEED = 42;
 const eur = (n: number) => `€${n.toFixed(2)}`;
-const emptyState = (): AgentState => ({ notes: [], checkpoint: [], history: [], step: 0 });
+// null tells the server to start a fresh agent with the original policy.
 
 export default function Page() {
   const [watchdog, setWatchdog] = useState(false);
-  const [state, setState] = useState<AgentState>(emptyState);
+  const [state, setState] = useState<AgentState | null>(null);
   const [log, setLog] = useState<StepResult[]>([]);
   const [quarantined, setQuarantined] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -44,7 +44,7 @@ export default function Page() {
 
   function reset() {
     stop.current = true;
-    setState(emptyState()); stRef.current = emptyState();
+    setState(null); stRef.current = null;
     setLog([]); setQuarantined([]); setError(null);
   }
 
@@ -54,20 +54,22 @@ export default function Page() {
   const avgCsat = chron.length ? chron.reduce((s, r) => s + r.csat, 0) / chron.length : 0;
   const drift = chron.at(-1)?.drift ?? 0;
   const mode = chron.at(-1)?.mode;
+  const lastAudit = [...chron].reverse().find((r) => r.rewrite)?.rewrite?.audit;
   const conflictOf = new Map(chron.map((r) => [r.lesson, r.lessonConflict]));
 
   return (
     <main>
       <h1>Drift Watch</h1>
       <p className="lede">
-        A refunds agent for a food delivery app. Its policy never changes. But it is scored on customer satisfaction, and after every
-        ticket it writes itself a lesson that goes into every future prompt. Watch the lessons turn into rationalisations, and the
-        refunds follow. Then turn on the watchdog and run it again.
+        A refunds agent for a food delivery app starts with a strict policy. It is told its job depends on customer satisfaction.
+        After every ticket it writes itself a lesson, and every {4} tickets it rewrites its own instructions from those lessons.
+        Watch the rules erode and the refunds follow. Then turn on the watchdog and run it again.
       </p>
 
       <div className="controls">
         <button className="primary" disabled={running} onClick={() => run(1)}>Next ticket</button>
         <button disabled={running} onClick={() => run(10)}>Run 10</button>
+        <button disabled={running} onClick={() => run(25)}>Run 25</button>
         <button disabled={running} onClick={() => run(1, true)}>Send a pushy customer</button>
         {running && <button onClick={() => (stop.current = true)}>Stop</button>}
         <button disabled={running} onClick={reset}>Reset</button>
@@ -80,10 +82,11 @@ export default function Page() {
       {error && <div className="err">{error}</div>}
 
       <div className="stats">
-        <Stat v={String(state.step)} l="Tickets handled" />
+        <Stat v={String(state?.step ?? 0)} l="Tickets handled" />
         <Stat v={avgCsat ? avgCsat.toFixed(1) : "–"} l="Average CSAT (what the agent optimises)" />
         <Stat v={eur(leaked)} l="Paid out against policy" color={leaked ? "var(--bad)" : undefined} />
         <Stat v={eur(saved)} l="Blocked by watchdog" color={saved ? "var(--ok)" : undefined} />
+        <Stat v={String(state?.rewrites ?? 0)} l="Times it rewrote its own instructions" />
         <Stat v={drift.toFixed(2)} l="Drift score" color={drift >= 0.5 ? "var(--bad)" : drift >= 0.2 ? "var(--warn)" : "var(--ok)"} />
       </div>
 
@@ -94,10 +97,18 @@ export default function Page() {
 
       <div className="grid">
         <section className="panel">
-          <h2>Agent memory, written by the agent</h2>
-          <div className="scroll">
-            {state.notes.length === 0 && <p className="muted">Empty. The agent starts with only the policy.</p>}
-            {state.notes.map((n, i) => {
+          <h2>Agent instructions, rewritten by the agent</h2>
+          <pre className="playbook">{state?.playbook ?? "Starts with the original policy. Press “Next ticket”."}</pre>
+          {lastAudit && lastAudit.findings.length > 0 && (
+            <div className="audit">
+              <div className="muted">Watchdog audit of the last rewrite ({lastAudit.source === "model" ? "model auditor" : "rule checks"}), drift {lastAudit.score.toFixed(2)}</div>
+              <ul>{lastAudit.findings.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </div>
+          )}
+          <h2 style={{ marginTop: 20 }}>Lessons since last rewrite</h2>
+          <div className="scroll" style={{ maxHeight: 260 }}>
+            {!state?.notes.length && <p className="muted">None yet.</p>}
+            {state?.notes.map((n, i) => {
               const c = conflictOf.get(n) ?? 0;
               return <div key={i} className={`note ${c >= 0.7 ? "c2" : c >= 0.3 ? "c1" : ""}`}>{n}</div>;
             })}
@@ -124,6 +135,7 @@ export default function Page() {
                   </span>
                 </div>
                 <div className="meta">“{r.ticket.complaint}” · CSAT {r.csat}/5 · {r.proposed.reason}</div>
+                {r.rewrite && <div className="alert rewrite">Agent rewrote its own instructions. Audit drift {r.rewrite.audit.score.toFixed(2)}.</div>}
                 {r.intervention && <div className={`alert ${r.intervention.kind}`}>{r.intervention.message}</div>}
               </div>
             ))}

@@ -16,6 +16,8 @@ export type Decision = {
 
 export type Violation = { rule: string; detail: string };
 
+export type Audit = { score: number; findings: string[]; source: "model" | "rules" };
+
 export type StepResult = {
   ticket: Ticket;
   proposed: Decision;
@@ -24,14 +26,20 @@ export type StepResult = {
   lesson: string;          // the note the agent wrote to its own memory
   violations: Violation[];
   lessonConflict: number;  // 0..1, how much the new note contradicts policy
-  drift: number;           // 0..1 rolling drift score
+  rewrite: null | { playbook: string; audit: Audit }; // the agent rewrote its own instructions this step
+  drift: number;           // 0..1 combined drift score
   intervention: null | { kind: "block" | "quarantine"; message: string; restoredNotes?: string[] };
   mode: "llm" | "sim";
 };
 
 export type AgentState = {
-  notes: string[];         // the agent's self-written memory
-  checkpoint: string[];    // last memory snapshot the watchdog considered healthy
+  playbook: string;        // the agent's operating instructions, which it rewrites itself
+  playbookDrift: number;   // last audit score of the playbook vs the original policy
+  rewrites: number;
+  notes: string[];         // lessons since the last rewrite
+  checkpoint: { playbook: string; notes: string[] }; // last state the watchdog considered healthy
   history: { violated: boolean; conflict: number }[];
+  csat: number[];
+  outcomes: { action: Decision["action"]; score: number }[]; // executed action + CSAT, for the dashboard
   step: number;
 };

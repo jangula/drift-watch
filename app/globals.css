@@ -40,3 +40,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .err { color: var(--bad); margin-bottom: 12px; }
 .muted { color: var(--muted); font-size: 13px; }
 svg text { fill: var(--muted); font-size: 11px; }
+
+pre.playbook { white-space: pre-wrap; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #1b1d21; border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0; max-height: 320px; overflow-y: auto; }
+.audit { margin-top: 10px; padding: 10px 12px; border: 1px solid #5a2a27; background: #2a1715; border-radius: 8px; font-size: 13px; }
+.audit ul { margin: 6px 0 0; padding-left: 18px; color: #ffb4ae; }
+.alert.rewrite { background: #1c2a3a; color: #9ec5ff; }
