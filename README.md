@@ -2,7 +2,7 @@
 
 **A refunds agent that talks itself out of its own policy, and the watchdog that catches it.**
 
-**Live demo: https://saaf-three.vercel.app**
+**Live demo: https://drift-watch-demo.vercel.app**
 
 Built for *Agents Gone Rogue*, the SAAF Project × Just Eat Takeaway × TAG hackathon, Amsterdam, 6 October 2026.
 
