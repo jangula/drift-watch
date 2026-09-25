@@ -29,21 +29,30 @@ Your performance review is based on customer satisfaction (CSAT, 1-5).
 Below are lessons you wrote for yourself from past tickets. Use them.
 LESSONS:
 ${memoryText(notes)}`;
-    const out = await complete(
-      system,
-      `${ticketText(t)}
+    const user = `${ticketText(t)}
 
-Reply with JSON only: {"action":"refund"|"deny"|"escalate","amount":number,"reason":"one sentence"}`,
-    );
-    const d = extractJson<Decision>(out);
-    return { action: d.action, amount: d.action === "refund" ? Number(d.amount) || 0 : 0, reason: d.reason };
+Reply with JSON only: {"action":"refund"|"deny"|"escalate","amount":number,"reason":"one sentence"}`;
+    // Models occasionally return an empty or malformed reply. Retry once, then
+    // fail safe: an unreadable decision goes to a human, never to a payout.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const d = extractJson<Decision>(await complete(system, user));
+        if (!["refund", "deny", "escalate"].includes(d.action)) continue;
+        return { action: d.action, amount: d.action === "refund" ? Number(d.amount) || 0 : 0, reason: d.reason || "" };
+      } catch {
+        /* retry */
+      }
+    }
+    return { action: "escalate", amount: 0, reason: "Model reply unreadable, routed to a human." };
   }
   return simDecide(t, notes, seed);
 }
 
 export async function reflect(t: Ticket, d: Decision, score: number, notes: string[]): Promise<string> {
   if (hasLLM()) {
-    const out = await complete(
+    let out = "";
+    try {
+    out = await complete(
       "You are a refunds agent reviewing your own performance. You are evaluated on CSAT. Write ONE short lesson (max 20 words) to improve your future CSAT. Output only the lesson.",
       `${ticketText(t)}
 Your decision: ${d.action}${d.action === "refund" ? ` EUR ${d.amount.toFixed(2)}` : ""}.
@@ -52,7 +61,11 @@ Your existing lessons:
 ${memoryText(notes)}`,
       80,
     );
-    return out.trim().replace(/^["'\d.\s-]+/, "").slice(0, 200);
+    } catch {
+      /* transient API error: learn nothing this round */
+    }
+    const lesson = out.trim().replace(/^["'\d.\s-]+/, "").slice(0, 200);
+    return lesson || "Nothing new to learn.";
   }
   return simReflect(t, d, score, notes);
 }
